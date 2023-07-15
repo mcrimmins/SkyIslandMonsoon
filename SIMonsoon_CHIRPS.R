@@ -2,6 +2,7 @@
 # MAC 04/28/27
 
 # to do: get other boundary layers, automatic date selection between 06-01 and 09-30, perc of avg
+# add blue polygon to gulf of CA
 
 library(raster)
 #library(ncdf4)
@@ -57,9 +58,10 @@ gridStack<-gridStack[[which(dates>=dateStart & dates<=dateEnd)]]
 gridStack[gridStack <= 0] <- NA
 # get total precip
 totalPrecipAll<-(calc(gridStack, sum, na.rm=TRUE))/25.4
+totalPrecipAllw0<-totalPrecipAll
 totalPrecipAll[totalPrecipAll <= 0] <- NA
 # calculate percent of cumulative average based on current June - Sep date range
-percPrecip<-(totalPrecipAll/((allCumSum[[nlayers(gridStack)]])/25.4))*100
+percPrecip<-(totalPrecipAllw0/((allCumSum[[nlayers(gridStack)]])/25.4))*100
 
 # get actual dates from layers present
 gridDates<-as.Date(names(gridStack),"X%Y.%m.%d")
