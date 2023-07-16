@@ -9,9 +9,12 @@ library(raster)
 
 # load layers
 SIbounds <- rgdal::readOGR(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes", layer = "SkyIslandBoundary")
-ext<-extent(SIbounds)
-lons<-c(ext@xmin-0.25, ext@xmax+0.25)
-lats<-c(ext@ymin-0.25, ext@ymax+0.25)
+  ext<-extent(SIbounds)
+  lons<-c(ext@xmin-0.25, ext@xmax+0.25)
+  lats<-c(ext@ymin-0.25, ext@ymax+0.25)
+gulfCA <- rgdal::readOGR(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes/gulfCA", layer = "Gulf_of_CA_poly")
+
+
 
 # map layers
 states <- getData('GADM', country='United States', level=1)
@@ -78,6 +81,7 @@ SI_df<-fortify(SIbounds)
 states<-fortify(states)
 mx<-fortify(mx)
 us<-fortify(us)
+gulfCA<-fortify(gulfCA)
 
 # total precip Map -----
 # colorramp for total precip
@@ -123,8 +127,11 @@ p<-p+geom_path(data = us,
                aes(x = long, y = lat, group = group),
                color = 'black', size = 1)
 
+p<-p +  geom_polygon(data=gulfCA, aes(x=long, y=lat, group=group),colour="black", fill="darkcyan", size=0.25 )
+  
 p<-p+geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
                size = 4, col = "black", fontface = "bold", nudge_y = 0)
+
 
 
 # write out file
@@ -192,6 +199,8 @@ p<-p+geom_path(data = mx,
 p<-p+geom_path(data = us, 
                aes(x = long, y = lat, group = group),
                color = 'black', size = 1)
+
+p<-p +  geom_polygon(data=gulfCA, aes(x=long, y=lat, group=group),colour="black", fill="darkcyan", size=0.25 )
 
 p<-p+geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
                size = 4, col = "black", fontface = "bold", nudge_y = 0)
