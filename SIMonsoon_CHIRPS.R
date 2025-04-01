@@ -6,20 +6,35 @@
 
 library(raster)
 #library(ncdf4)
+library(sf)
 
 # load layers
-SIbounds <- rgdal::readOGR(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes", layer = "SkyIslandBoundary")
+# SIbounds <- rgdal::readOGR(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes", layer = "SkyIslandBoundary")
+#   ext<-extent(SIbounds)
+#   lons<-c(ext@xmin-0.25, ext@xmax+0.25)
+#   lats<-c(ext@ymin-0.25, ext@ymax+0.25)
+# gulfCA <- rgdal::readOGR(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes/gulfCA", layer = "Gulf_of_CA_poly")
+
+#### NEW SF CODE ####
+SIbounds <- st_read(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes", layer = "SkyIslandBoundary")
   ext<-extent(SIbounds)
   lons<-c(ext@xmin-0.25, ext@xmax+0.25)
   lats<-c(ext@ymin-0.25, ext@ymax+0.25)
-gulfCA <- rgdal::readOGR(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes/gulfCA", layer = "Gulf_of_CA_poly")
+gulfCA <- st_read(dsn = "/home/crimmins/RProjects/SkyIslandMonsoon/shapes/gulfCA", layer = "Gulf_of_CA_poly")
+st_crs(gulfCA) <- 4326  # WGS84
 
-
+#### NEW MAP LAYERS CODE
+us <- geodata::gadm(country = "USA", level = 0, path = tempdir(), resolution = 2)
+  us<- st_as_sf(us)
+states <- geodata::gadm(country = "USA", level = 1, path = tempdir(), resolution = 2)
+  states <- st_as_sf(states)
+mx <- geodata::gadm(country = "MEX", level = 1, path = tempdir(), resolution = 2)
+  mx <- st_as_sf(mx)
 
 # map layers
-states <- getData('GADM', country='United States', level=1)
-us <- getData('GADM', country='United States', level=0)
-mx <- getData('GADM', country='Mexico', level=1)
+#states <- getData('GADM', country='United States', level=1)
+#us <- getData('GADM', country='United States', level=0)
+#mx <- getData('GADM', country='Mexico', level=1)
 #goc <- rgdal::readOGR(dsn="/home/crimmins/RProjects/StateMonsoonMaps/shps", layer="goc")
 #goc <- ggplot2::fortify(goc)
 stateLab<-rbind.data.frame(c(33,-111.8,"Arizona"),
@@ -33,9 +48,9 @@ colnames(stateLab)<-c("lat","lon","lab")
   
 
 # set date ranges
-# yr<-2022
-# dateStart<-as.Date("2022-06-01")
-# dateEnd<-as.Date("2022-09-30")
+ # yr<-2022
+ # dateStart<-as.Date("2022-06-01")
+ # dateEnd<-as.Date("2022-09-30")
 # real time
 yr<-as.numeric(format(Sys.Date(),"%Y"))
 dateStart<-as.Date(paste0(yr,"-06-01"))
@@ -95,44 +110,73 @@ precLabs[1]<-"0.01"
 
 #theme_set(theme_bw())
 
-p<-gplot(totalPrecipAll) + geom_tile(aes(fill = value)) +
-  #scale_fill_gradient2(low = 'white', high = 'blue') +
-  #scale_fill_distiller(palette = "Spectral", direction = -1, na.value="darkgoldenrod", 
-  #                     name="inches", limits=c(0,20),oob=squish)+
-  
-  scale_fill_gradientn(colours = precipCols, na.value="burlywood4", 
-                       name="inches", limits=c(0,24),oob=squish, breaks=precBreaks, labels=precLabs, expand=NULL)+
-  guides(fill= guide_colorbar(barheight=15,nbin = 500, raster = FALSE))+
-  
-  coord_equal(xlim = lons, ylim = lats, expand = FALSE)+
-  xlab("Longitude") + ylab("Latitude") 
+# Convert raster to dataframe for ggplot
+prec_df <- as.data.frame(totalPrecipAll, xy = TRUE, na.rm = FALSE)
+colnames(prec_df) <- c("x", "y", "value")  # Adjust if needed
 
-p<-p +  geom_polygon( data=SI_df, aes(x=long, y=lat),colour="black", fill=NA, size=0.25 )+
-  #scale_x_continuous(breaks = c(-120,-140))+
-  #ggtitle("Total Precipitation  - PRISM")+
+p <- ggplot() +
+  geom_raster(data = prec_df, aes(x = x, y = y, fill = value)) +
+  scale_fill_gradientn(colours = precipCols, na.value = "burlywood4", 
+                       name = "inches", limits = c(0, 24), oob = squish, 
+                       breaks = precBreaks, labels = precLabs) +
+  guides(fill = guide_colorbar(barheight = 15, nbin = 500, raster = FALSE)) +
+  # add layers
+  geom_sf(data = SIbounds, colour = "black", fill = NA, size = 0.25) +
+  geom_sf(data = states, color = "black", fill = NA, size = 0.25)+
+  geom_sf(data = mx, color = "black", fill = NA, size = 0.25)+
+  geom_sf(data = us, color = "black", fill = NA, size = 0.25)+
+  geom_sf(data = gulfCA, color = "black", fill="darkcyan", size = 0.25)+
+  geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
+            size = 4, col = "black", fontface = "bold", nudge_y = 0)+
+  coord_sf(xlim = lons, ylim = lats, expand = FALSE) +
+  xlab("Longitude") + ylab("Latitude")+
   ggtitle(paste0("Sky Island Region Total Precip (in.): ",gridDates[1]," to ",gridDates[length(gridDates)]))+
   labs(caption=paste0("Plot created: ",format(Sys.time(), "%Y-%m-%d"),
-                     "\nThe University of Arizona\nhttps://cals.arizona.edu/climate/\nData Source: CHIRPS\nhttps://www.chc.ucsb.edu/data/chirps"))+
+                      "\nThe University of Arizona\nhttps://cals.arizona.edu/climate/\nData Source: CHIRPS\nhttps://www.chc.ucsb.edu/data/chirps"))+
   theme(plot.title=element_text(size=14, face = "bold"))
 
-p<-p+geom_path(data = states, 
-               aes(x = long, y = lat, group = group),
-               color = 'black', size = 0.25)
-
-p<-p+geom_path(data = mx, 
-               aes(x = long, y = lat, group = group),
-               color = 'black', size = .25)
-
-p<-p+geom_path(data = us, 
-               aes(x = long, y = lat, group = group),
-               color = 'black', size = 1)
-
-p<-p +  geom_polygon(data=gulfCA, aes(x=long, y=lat, group=group),colour="black", fill="darkcyan", size=0.25 )
-  
-p<-p+geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
-               size = 4, col = "black", fontface = "bold", nudge_y = 0)
-
-
+##### OLD CODE -----
+# p<-gplot(totalPrecipAll) + geom_tile(aes(fill = value)) +
+#   #scale_fill_gradient2(low = 'white', high = 'blue') +
+#   #scale_fill_distiller(palette = "Spectral", direction = -1, na.value="darkgoldenrod", 
+#   #                     name="inches", limits=c(0,20),oob=squish)+
+#   
+#   scale_fill_gradientn(colours = precipCols, na.value="burlywood4", 
+#                        name="inches", limits=c(0,24),oob=squish, breaks=precBreaks, labels=precLabs, expand=NULL)+
+#   guides(fill= guide_colorbar(barheight=15,nbin = 500, raster = FALSE))+
+#   
+#   coord_sf(xlim = lons, ylim = lats, expand = FALSE)+
+#   xlab("Longitude") + ylab("Latitude") 
+# 
+# p<-p +  
+#   #geom_sf(data=SIbounds,colour="black", fill=NA, size=0.25 )+
+#   #geom_polygon( data=SI_df, aes(x=long, y=lat),colour="black", fill=NA, size=0.25 )+
+#   #scale_x_continuous(breaks = c(-120,-140))+
+#   #ggtitle("Total Precipitation  - PRISM")+
+#   ggtitle(paste0("Sky Island Region Total Precip (in.): ",gridDates[1]," to ",gridDates[length(gridDates)]))+
+#   labs(caption=paste0("Plot created: ",format(Sys.time(), "%Y-%m-%d"),
+#                      "\nThe University of Arizona\nhttps://cals.arizona.edu/climate/\nData Source: CHIRPS\nhttps://www.chc.ucsb.edu/data/chirps"))+
+#   theme(plot.title=element_text(size=14, face = "bold"))
+# p <- p + 
+#   geom_sf(data = states, color = "black", fill = NA, size = 0.25)
+# 
+# p<-p+geom_path(data = states, 
+#                aes(x = long, y = lat, group = group),
+#                color = 'black', size = 0.25)
+# 
+# p<-p+geom_path(data = mx, 
+#                aes(x = long, y = lat, group = group),
+#                color = 'black', size = .25)
+# 
+# p<-p+geom_path(data = us, 
+#                aes(x = long, y = lat, group = group),
+#                color = 'black', size = 1)
+# 
+# p<-p +  geom_polygon(data=gulfCA, aes(x=long, y=lat, group=group),colour="black", fill="darkcyan", size=0.25 )
+#   
+# p<-p+geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
+#                size = 4, col = "black", fontface = "bold", nudge_y = 0)
+######
 
 # write out file
 png(paste0("/home/crimmins/RProjects/SkyIslandMonsoon/figs/SkyIslandRegion_Monsoon_TotalPrecip.png"),
@@ -166,45 +210,70 @@ precLabs[9]<-">400"
 precLabs[1]<-"0"
 #precBreaksmin<-seq(1,19,2)
 
-#theme_set(theme_bw())
-p<-gplot(percPrecip) + geom_tile(aes(fill = value)) +
-  #scale_fill_gradient2(low = 'white', high = 'blue') +
-  #scale_fill_distiller(palette = "Spectral", direction = -1, na.value="darkgoldenrod", 
-  #                     name="inches", limits=c(0,20),oob=squish)+
-  
+# Convert raster to dataframe for ggplot
+prec_df <- as.data.frame(percPrecip, xy = TRUE, na.rm = FALSE)
+colnames(prec_df) <- c("x", "y", "value")  # Adjust if needed
+
+p <- ggplot() +
+  geom_raster(data = prec_df, aes(x = x, y = y, fill = value)) +
   scale_fill_gradientn(colours = precipCols, na.value="burlywood4", 
                        name="% of avg", limits=c(0,400),oob=squish, breaks=precBreaks, labels=precLabs, expand=NULL)+
   guides(fill= guide_colorbar(barheight=15,nbin = 500, raster = FALSE))+
-  
-  coord_equal(xlim = lons, ylim = lats, expand = FALSE)+
-  xlab("Longitude") + ylab("Latitude") 
-
-p<-p +  geom_polygon( data=SI_df, aes(x=long, y=lat),colour="black", fill=NA, size=0.25 )+
-  #scale_x_continuous(breaks = c(-120,-140))+
-  #ggtitle("Total Precipitation  - PRISM")+
-  #ggtitle(paste0("Sky Island Region Percent of Avg: ",gridDates[1]," to ",gridDates[length(gridDates)]))+
+  # add layers
+  geom_sf(data = SIbounds, colour = "black", fill = NA, size = 0.25) +
+  geom_sf(data = states, color = "black", fill = NA, size = 0.25)+
+  geom_sf(data = mx, color = "black", fill = NA, size = 0.25)+
+  geom_sf(data = us, color = "black", fill = NA, size = 0.25)+
+  geom_sf(data = gulfCA, color = "black", fill="darkcyan", size = 0.25)+
+  geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
+            size = 4, col = "black", fontface = "bold", nudge_y = 0)+
+  coord_sf(xlim = lons, ylim = lats, expand = FALSE) +
+  xlab("Longitude") + ylab("Latitude")+
   labs(title=paste0("Sky Island Region Percent of Avg Precip: \n ",gridDates[1]," to ",gridDates[length(gridDates)]))+
   labs(caption=paste0("Plot created: ",format(Sys.time(), "%Y-%m-%d"),
                       "\nThe University of Arizona\nhttps://cals.arizona.edu/climate/\nData Source: CHIRPS\nhttps://www.chc.ucsb.edu/data/chirps"))+
   theme(plot.title=element_text(size=14, face = "bold"))
 
-p<-p+geom_path(data = states, 
-               aes(x = long, y = lat, group = group),
-               color = 'black', size = 0.25)
-
-p<-p+geom_path(data = mx, 
-               aes(x = long, y = lat, group = group),
-               color = 'black', size = .25)
-
-p<-p+geom_path(data = us, 
-               aes(x = long, y = lat, group = group),
-               color = 'black', size = 1)
-
-p<-p +  geom_polygon(data=gulfCA, aes(x=long, y=lat, group=group),colour="black", fill="darkcyan", size=0.25 )
-
-p<-p+geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
-               size = 4, col = "black", fontface = "bold", nudge_y = 0)
-
+##### OLD CODE -----
+#theme_set(theme_bw())
+# p<-gplot(percPrecip) + geom_tile(aes(fill = value)) +
+#   #scale_fill_gradient2(low = 'white', high = 'blue') +
+#   #scale_fill_distiller(palette = "Spectral", direction = -1, na.value="darkgoldenrod", 
+#   #                     name="inches", limits=c(0,20),oob=squish)+
+#   
+#   scale_fill_gradientn(colours = precipCols, na.value="burlywood4", 
+#                        name="% of avg", limits=c(0,400),oob=squish, breaks=precBreaks, labels=precLabs, expand=NULL)+
+#   guides(fill= guide_colorbar(barheight=15,nbin = 500, raster = FALSE))+
+#   
+#   coord_equal(xlim = lons, ylim = lats, expand = FALSE)+
+#   xlab("Longitude") + ylab("Latitude") 
+# 
+# p<-p +  geom_polygon( data=SI_df, aes(x=long, y=lat),colour="black", fill=NA, size=0.25 )+
+#   #scale_x_continuous(breaks = c(-120,-140))+
+#   #ggtitle("Total Precipitation  - PRISM")+
+#   #ggtitle(paste0("Sky Island Region Percent of Avg: ",gridDates[1]," to ",gridDates[length(gridDates)]))+
+#   labs(title=paste0("Sky Island Region Percent of Avg Precip: \n ",gridDates[1]," to ",gridDates[length(gridDates)]))+
+#   labs(caption=paste0("Plot created: ",format(Sys.time(), "%Y-%m-%d"),
+#                       "\nThe University of Arizona\nhttps://cals.arizona.edu/climate/\nData Source: CHIRPS\nhttps://www.chc.ucsb.edu/data/chirps"))+
+#   theme(plot.title=element_text(size=14, face = "bold"))
+# 
+# p<-p+geom_path(data = states, 
+#                aes(x = long, y = lat, group = group),
+#                color = 'black', size = 0.25)
+# 
+# p<-p+geom_path(data = mx, 
+#                aes(x = long, y = lat, group = group),
+#                color = 'black', size = .25)
+# 
+# p<-p+geom_path(data = us, 
+#                aes(x = long, y = lat, group = group),
+#                color = 'black', size = 1)
+# 
+# p<-p +  geom_polygon(data=gulfCA, aes(x=long, y=lat, group=group),colour="black", fill="darkcyan", size=0.25 )
+# 
+# p<-p+geom_text(data = stateLab, aes(x = lon, y = lat, label = lab),
+#                size = 4, col = "black", fontface = "bold", nudge_y = 0)
+######
 
 # write out file
 png(paste0("/home/crimmins/RProjects/SkyIslandMonsoon/figs/SkyIslandRegion_Monsoon_PercPrecip.png"),
@@ -231,5 +300,5 @@ image_write(final_plot, paste0("/home/crimmins/RProjects/SkyIslandMonsoon/figs/S
 unlink('/home/crimmins/RProjects/SkyIslandMonsoon/temp.nc')
 
 # push bullet notify
-source('/home/crimmins/RProjects/SkyIslandMonsoon/pushNotify.R')
+#source('/home/crimmins/RProjects/SkyIslandMonsoon/pushNotify.R')
 
